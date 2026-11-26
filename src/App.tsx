@@ -22,6 +22,7 @@ import {
   CompassIcon,
   GlobeCheckIcon,
 } from './components/ui/Icons.tsx';
+import { InstallAppButton } from './components/pwa/InstallAppButton.tsx';
 import { haptics } from './lib/haptics.ts';
 
 type WorkspaceTabId = 'discovery' | 'checker' | 'shortlist';
@@ -279,6 +280,7 @@ export function App() {
     <div className="app-shell">
       <header className="top-header">
         <h1 className="brand-heading">Brand Finder</h1>
+        <InstallAppButton />
       </header>
 
       <main>

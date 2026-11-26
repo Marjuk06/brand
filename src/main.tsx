@@ -15,3 +15,11 @@ createRoot(rootEl).render(
     <App />
   </StrictMode>,
 );
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Service worker registration is non-critical; ignore offline/dev failures.
+    });
+  });
+}
