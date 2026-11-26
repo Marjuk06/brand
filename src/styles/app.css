@@ -218,6 +218,10 @@ body {
 }
 
 @media (width <= 768px) {
+  .app-shell {
+    padding-block-end: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
   .liquid-nav-shell {
     position: fixed;
     inset-block-end: max(12px, env(safe-area-inset-bottom, 12px));

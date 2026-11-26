@@ -14,9 +14,14 @@ import {
   streamStaticBrandDiscovery,
 } from './staticEngine.ts';
 
-// Remember when running on static hosting (no Node /api backend) so subsequent
-// calls go straight to the browser-native RDAP + Datamuse engine.
-let useStaticFallback = false;
+// Use the local Node backend only on localhost/127.0.0.1; on static/Vercel
+// hosting, go straight to the browser-native engine with zero /api requests.
+const isLocalBackendHost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1');
+
+let useStaticFallback = !isLocalBackendHost;
 
 function isMissingBackendResponse(res: Response, expectedMime: string): boolean {
   if (res.status === 404 || res.status === 405) return true;

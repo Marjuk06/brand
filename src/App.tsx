@@ -67,6 +67,7 @@ export function App() {
 
   const [isScanning, setIsScanning] = useState(false);
   const [scannedCount, setScannedCount] = useState(0);
+  const [batchTargetCount, setBatchTargetCount] = useState(0);
   const [availableCount, setAvailableCount] = useState(0);
   const [takenCount, setTakenCount] = useState(0);
   const [totalMatchingPool, setTotalMatchingPool] = useState(0);
@@ -112,20 +113,27 @@ export function App() {
   }, []);
 
   const runScan = useCallback(
-    async (scanParams: DiscoveryFilterParams, appendResults: boolean) => {
+    async (
+      scanParams: DiscoveryFilterParams,
+      appendResults: boolean,
+      baseCount = 0,
+    ) => {
       abortControllerRef.current?.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
       if (!appendResults) {
         setDiscoveredMap(new Map());
+        setScannedCount(0);
+        setAvailableCount(0);
+        setTakenCount(0);
+        setBatchTargetCount(scanParams.batchSize);
+      } else {
+        setBatchTargetCount(baseCount + scanParams.batchSize);
       }
 
       celebratedAvailableRef.current = false;
       setIsScanning(true);
-      setScannedCount(0);
-      setAvailableCount(0);
-      setTakenCount(0);
       setScanError(null);
 
       // Batch incoming stream events per animation frame to avoid re-rendering
@@ -133,6 +141,7 @@ export function App() {
       let pendingCandidates: BrandCandidate[] = [];
       let pendingProgress: {
         scannedCount: number;
+        totalBatchCandidates: number;
         availableCount: number;
         takenCount: number;
         currentWord: string;
@@ -155,7 +164,8 @@ export function App() {
         if (pendingProgress) {
           const prog = pendingProgress;
           pendingProgress = null;
-          setScannedCount(prog.scannedCount);
+          setScannedCount(baseCount + prog.scannedCount);
+          setBatchTargetCount(baseCount + prog.totalBatchCandidates);
           setAvailableCount(prog.availableCount);
           setTakenCount(prog.takenCount);
           setCurrentWord(prog.currentWord);
@@ -183,6 +193,7 @@ export function App() {
           } else if (event.type === 'progress') {
             pendingProgress = {
               scannedCount: event.scannedCount,
+              totalBatchCandidates: event.totalBatchCandidates,
               availableCount: event.availableCount,
               takenCount: event.takenCount,
               currentWord: event.currentWord,
@@ -193,6 +204,8 @@ export function App() {
               window.cancelAnimationFrame(rafId);
             }
             flushBufferedEvents();
+            setScannedCount(baseCount + event.scannedCount);
+            setBatchTargetCount(baseCount + event.scannedCount);
             setTotalMatchingPool(event.totalMatchingPool);
             setNextOffset(event.nextOffset);
           } else if (event.type === 'error') {
@@ -243,14 +256,14 @@ export function App() {
     const fresh = { ...filters, offset: 0 };
     setFilters(fresh);
     setLastScannedSummary(formatFilterSummary(fresh));
-    void runScan(fresh, false);
+    void runScan(fresh, false, 0);
   };
 
   const handleScanNextBatch = (): void => {
     const nextParams = { ...filters, offset: nextOffset };
     setFilters(nextParams);
     setLastScannedSummary(formatFilterSummary(nextParams));
-    void runScan(nextParams, true);
+    void runScan(nextParams, true, discoveredMap.size);
   };
 
   const handleStopScan = (): void => {
@@ -361,7 +374,9 @@ export function App() {
             <PipelineStatusBar
               isScanning={isScanning}
               scannedCount={scannedCount}
-              batchTarget={filters.batchSize}
+              batchTarget={
+                batchTargetCount > 0 ? batchTargetCount : filters.batchSize
+              }
               availableCount={
                 allDiscovered.length > 0 ? totalAvailableInList : availableCount
               }
@@ -382,6 +397,7 @@ export function App() {
               onClearResults={() => {
                 setDiscoveredMap(new Map());
                 setScannedCount(0);
+                setBatchTargetCount(0);
                 setAvailableCount(0);
                 setTakenCount(0);
                 setLastScannedSummary('');

@@ -225,8 +225,17 @@ async function verifyDomainStatic(
     if (cached) return cached;
   }
 
-  const rdap = await queryRdapClient(domain, tld);
-  const result = rdap ?? (await queryGoogleDoh(domain, tld));
+  // Query Google DNS-over-HTTPS first: always returns HTTP 200 (no 404 console
+  // noise or RDAP burst rate-limiting). Only confirm available domains via RDAP.
+  const dohResult = await queryGoogleDoh(domain, tld);
+  let result = dohResult;
+
+  if (dohResult.status !== 'taken') {
+    const rdap = await queryRdapClient(domain, tld);
+    if (rdap) {
+      result = rdap;
+    }
+  }
 
   if (result.status !== 'unknown') {
     domainCache.set(domain, result);
