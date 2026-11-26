@@ -1,4 +1,7 @@
-import type { BrandCandidate, ExportReportPayload } from '../../../src/types/brand.ts';
+import type {
+  BrandCandidate,
+  ExportReportPayload,
+} from '../../../src/types/brand.ts';
 
 function sanitizePdfText(input: string): string {
   return input
@@ -13,6 +16,22 @@ function truncateText(text: string, maxChars: number): string {
   return `${text.slice(0, maxChars - 3)}...`;
 }
 
+function drawText(
+  ops: string[],
+  x: number,
+  y: number,
+  text: string,
+  size: number,
+  bold: boolean,
+  rgb: [number, number, number],
+): void {
+  ops.push('BT');
+  ops.push(`${bold ? '/F2' : '/F1'} ${size} Tf`);
+  ops.push(`${rgb[0]} ${rgb[1]} ${rgb[2]} rg`);
+  ops.push(`${x} ${y} Td (${sanitizePdfText(text)}) Tj`);
+  ops.push('ET');
+}
+
 function renderReportPageStream(
   title: string,
   filterSummary: string,
@@ -21,150 +40,186 @@ function renderReportPageStream(
   totalPages: number,
   startRank: number,
   totalCandidates: number,
+  availableTotal: number,
 ): string {
   const ops: string[] = [];
 
-  // Page dimensions: A4 Landscape (842 x 595 pt)
-  // Header banner
-  ops.push('0.07 0.09 0.16 rg');
-  ops.push('36 515 770 52 re f');
+  // Minimal monochrome header banner (A4 Landscape: 842 x 595 pt)
+  ops.push('0.07 0.07 0.08 rg');
+  ops.push('36 516 770 46 re f');
 
-  ops.push('BT');
-  ops.push('/F2 15 Tf');
-  ops.push('1 1 1 rg');
-  ops.push(`50 544 Td (${sanitizePdfText(truncateText(title, 78))}) Tj`);
-  ops.push('ET');
+  drawText(ops, 48, 542, truncateText(title, 78), 13.5, true, [1, 1, 1]);
 
-  ops.push('BT');
-  ops.push('/F1 9 Tf');
-  ops.push('0.72 0.78 0.90 rg');
   const subtitle = [
-    'Founder: Marjuk Amin',
     `Filter: ${filterSummary}`,
-    `Total Exported: ${totalCandidates}`,
-  ].join('  |  ');
-  ops.push(`50 527 Td (${sanitizePdfText(truncateText(subtitle, 125))}) Tj`);
-  ops.push('ET');
+    `Total: ${totalCandidates}`,
+    `Available: ${availableTotal}`,
+  ].join('   |   ');
+  drawText(
+    ops,
+    48,
+    526,
+    truncateText(subtitle, 128),
+    8.5,
+    false,
+    [0.74, 0.74, 0.78],
+  );
 
-  // Table header bar
-  ops.push('0.14 0.19 0.30 rg');
-  ops.push('36 486 770 22 re f');
+  // Minimal table header bar
+  ops.push('0.95 0.95 0.96 rg');
+  ops.push('36 484 770 22 re f');
+  ops.push('0.18 0.18 0.21 RG');
+  ops.push('0.8 w');
+  ops.push('36 484 m 806 484 l S');
 
   const columns: Array<{ x: number; label: string }> = [
     { x: 44, label: '#' },
-    { x: 74, label: 'Brand Name' },
-    { x: 170, label: '.com Domain' },
-    { x: 282, label: 'Status' },
-    { x: 356, label: 'Len / Syl' },
-    { x: 416, label: 'Smooth' },
-    { x: 468, label: 'Ecosystem Subdomain & Email' },
-    { x: 642, label: 'Origin / Meaning' },
+    { x: 76, label: 'Brand' },
+    { x: 180, label: '.com Domain' },
+    { x: 302, label: 'Status' },
+    { x: 378, label: 'Len / Syl' },
+    { x: 434, label: 'Smooth' },
+    { x: 490, label: 'Definition / Origin' },
   ];
 
   for (const col of columns) {
-    ops.push('BT');
-    ops.push('/F2 8.5 Tf');
-    ops.push('0.95 0.97 1 rg');
-    ops.push(`${col.x} 494 Td (${sanitizePdfText(col.label)}) Tj`);
-    ops.push('ET');
+    drawText(ops, col.x, 492, col.label, 8.5, true, [0.12, 0.12, 0.15]);
   }
 
-  let y = 466;
+  let y = 464;
   const rowHeight = 20;
 
   rows.forEach((item, idx) => {
     const rank = startRank + idx + 1;
 
     if (idx % 2 === 1) {
-      ops.push('0.96 0.97 0.99 rg');
+      ops.push('0.98 0.98 0.99 rg');
       ops.push(`36 ${y - 5} 770 ${rowHeight} re f`);
     }
 
-    // Subtle row divider
-    ops.push('0.88 0.90 0.94 RG');
+    ops.push('0.90 0.90 0.92 RG');
     ops.push('0.4 w');
     ops.push(`36 ${y - 5} m 806 ${y - 5} l S`);
 
-    const drawCell = (
-      x: number,
-      value: string,
-      bold = false,
-      rgb: [number, number, number] = [0.1, 0.13, 0.2],
-    ): void => {
-      ops.push('BT');
-      ops.push(`${bold ? '/F2' : '/F1'} 8.5 Tf`);
-      ops.push(`${rgb[0]} ${rgb[1]} ${rgb[2]} rg`);
-      ops.push(`${x} ${y + 2} Td (${sanitizePdfText(value)}) Tj`);
-      ops.push('ET');
-    };
-
-    drawCell(44, String(rank), false, [0.42, 0.46, 0.55]);
-    drawCell(74, item.displayName, true, [0.06, 0.09, 0.18]);
-    drawCell(170, item.domain, false, [0.15, 0.25, 0.48]);
+    drawText(ops, 44, y + 2, String(rank), 8.5, false, [0.46, 0.46, 0.52]);
+    drawText(
+      ops,
+      76,
+      y + 2,
+      truncateText(item.displayName, 18),
+      8.5,
+      true,
+      [0.06, 0.06, 0.08],
+    );
+    drawText(
+      ops,
+      180,
+      y + 2,
+      truncateText(item.domain, 22),
+      8.5,
+      false,
+      [0.18, 0.22, 0.30],
+    );
 
     if (item.status === 'available') {
-      drawCell(282, 'AVAILABLE', true, [0.04, 0.48, 0.28]);
+      drawText(ops, 302, y + 2, 'AVAILABLE', 8, true, [0.04, 0.48, 0.28]);
     } else if (item.status === 'taken') {
-      drawCell(282, 'TAKEN', true, [0.68, 0.16, 0.2]);
+      drawText(ops, 302, y + 2, 'TAKEN', 8, true, [0.65, 0.16, 0.20]);
     } else {
-      drawCell(282, 'UNVERIFIED', false, [0.45, 0.45, 0.5]);
+      drawText(ops, 302, y + 2, 'UNKNOWN', 8, false, [0.45, 0.45, 0.50]);
     }
 
-    drawCell(356, `${item.length}L / ${item.syllables}S`);
-    drawCell(416, `${item.smoothnessScore}/99`);
-    drawCell(
-      468,
-      truncateText(`web.${item.domain} | team@${item.domain}`, 33),
+    drawText(
+      ops,
+      378,
+      y + 2,
+      `${item.length}L / ${item.syllables}S`,
+      8.5,
       false,
-      [0.24, 0.28, 0.36],
+      [0.24, 0.24, 0.28],
+    );
+    drawText(
+      ops,
+      434,
+      y + 2,
+      `${item.smoothnessScore}/99`,
+      8.5,
+      false,
+      [0.24, 0.24, 0.28],
     );
 
     const meaningSummary = item.meaning
-      ? `${item.languageOrigin}: ${item.meaning}`
+      ? `${item.meaning} (${item.languageOrigin})`
       : item.languageOrigin;
-    drawCell(642, truncateText(meaningSummary, 31), false, [0.3, 0.34, 0.42]);
+    drawText(
+      ops,
+      490,
+      y + 2,
+      truncateText(meaningSummary, 64),
+      8.5,
+      false,
+      [0.28, 0.28, 0.34],
+    );
 
     y -= rowHeight;
   });
 
-  // Footer
-  ops.push('BT');
-  ops.push('/F1 8 Tf');
-  ops.push('0.45 0.49 0.56 rg');
+  // Subtle outer table border
+  const tableBottom = 464 - rows.length * rowHeight + 15;
+  ops.push('0.84 0.84 0.88 RG');
+  ops.push('0.6 w');
+  ops.push(`36 ${tableBottom} 770 ${506 - tableBottom} re S`);
+
+  // Minimal footer
   const generatedStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  ops.push(
-    `36 22 Td (Brand Finder  |  Generated ${generatedStamp} UTC) Tj`,
+  drawText(
+    ops,
+    36,
+    22,
+    `Brand Finder  |  Generated ${generatedStamp} UTC`,
+    8,
+    false,
+    [0.48, 0.48, 0.54],
   );
-  ops.push(`735 22 Td (Page ${pageIndex + 1} of ${totalPages}) Tj`);
-  ops.push('ET');
+  drawText(
+    ops,
+    750,
+    22,
+    `Page ${pageIndex + 1} of ${totalPages}`,
+    8,
+    false,
+    [0.48, 0.48, 0.54],
+  );
 
   return ops.join('\n');
 }
 
-export function generateBrandReportPdf(payload: ExportReportPayload): Buffer {
+export function generateBrandReportPdf(
+  payload: ExportReportPayload,
+): Uint8Array<ArrayBuffer> {
   const rowsPerPage = 21;
   const allRows = payload.candidates;
   const totalPages = Math.max(1, Math.ceil(allRows.length / rowsPerPage));
+  const availableTotal = allRows.filter((c) => c.status === 'available').length;
+  const encoder = new TextEncoder();
 
   const pageStreams: string[] = [];
   for (let p = 0; p < totalPages; p += 1) {
     const chunk = allRows.slice(p * rowsPerPage, (p + 1) * rowsPerPage);
     pageStreams.push(
       renderReportPageStream(
-        payload.title || 'Mother Brand & .com Availability Report',
+        payload.title || 'Brand Name & .com Availability Report',
         payload.filterSummary || 'All Selected Candidates',
         chunk,
         p,
         totalPages,
         p * rowsPerPage,
         allRows.length,
+        availableTotal,
       ),
     );
   }
 
-  // Object IDs:
-  // 1: Catalog, 2: Pages, 3: Helvetica (/F1), 4: Helvetica-Bold (/F2)
-  // For each page i: pageObj = 5 + i*2, contentObj = 6 + i*2
   const objects: string[] = [];
   const pageKids: string[] = [];
 
@@ -191,7 +246,7 @@ export function generateBrandReportPdf(payload: ExportReportPayload): Buffer {
     const pageObjId = 5 + i * 2;
     const contentObjId = 6 + i * 2;
     const stream = pageStreams[i];
-    const byteLen = Buffer.byteLength(stream, 'ascii');
+    const byteLen = encoder.encode(stream).length;
 
     objects.push(
       `${pageObjId} 0 obj\n` +
@@ -208,11 +263,11 @@ export function generateBrandReportPdf(payload: ExportReportPayload): Buffer {
   const offsets: number[] = [0];
 
   for (const obj of objects) {
-    offsets.push(Buffer.byteLength(pdfBody, 'ascii'));
+    offsets.push(encoder.encode(pdfBody).length);
     pdfBody += `${obj}\n`;
   }
 
-  const xrefStart = Buffer.byteLength(pdfBody, 'ascii');
+  const xrefStart = encoder.encode(pdfBody).length;
   pdfBody += `xref\n0 ${objects.length + 1}\n`;
   pdfBody += '0000000000 65535 f \n';
 
@@ -224,5 +279,5 @@ export function generateBrandReportPdf(payload: ExportReportPayload): Buffer {
     `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n` +
     `startxref\n${xrefStart}\n%%EOF\n`;
 
-  return Buffer.from(pdfBody, 'ascii');
+  return encoder.encode(pdfBody);
 }

@@ -24,6 +24,9 @@ import { loadMultilingualLexicon } from '../../server/services/dictionary/multil
 import {
   generatePhoneticFormulaPool,
 } from '../../server/services/dictionary/phoneticGenerator.ts';
+import {
+  generateBrandReportPdf,
+} from '../../server/services/export/pdfReportBuilder.ts';
 
 interface RdapEvent {
   eventAction?: string;
@@ -468,106 +471,7 @@ export async function inspectStaticBrandCandidate(
   };
 }
 
-function sanitizePdfText(input: string): string {
-  return input
-    .replace(/[^\x20-\x7E]/g, ' ')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)');
-}
-
-function truncateText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars - 3)}...`;
-}
-
 export function buildStaticPdfReportBlob(payload: ExportReportPayload): Blob {
-  const rowsPerPage = 24;
-  const pages: BrandCandidate[][] = [];
-  for (let i = 0; i < payload.candidates.length; i += rowsPerPage) {
-    pages.push(payload.candidates.slice(i, i + rowsPerPage));
-  }
-  if (pages.length === 0) pages.push([]);
-
-  const objects: string[] = [
-    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj',
-    '',
-    '3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj',
-    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj',
-  ];
-
-  const pageIds: number[] = [];
-  let nextObjId = 5;
-  const encoder = new TextEncoder();
-
-  for (let p = 0; p < pages.length; p += 1) {
-    const pageObjId = nextObjId;
-    const contentObjId = nextObjId + 1;
-    nextObjId += 2;
-    pageIds.push(pageObjId);
-
-    const ops: string[] = [
-      '0.07 0.09 0.16 rg',
-      '36 515 770 52 re f',
-      'BT',
-      '/F2 15 Tf',
-      '1 1 1 rg',
-      `50 544 Td (${sanitizePdfText(truncateText(payload.title, 78))}) Tj`,
-      'ET',
-      'BT',
-      '/F1 9 Tf',
-      '0.72 0.78 0.90 rg',
-      `50 527 Td (${sanitizePdfText(truncateText(`Filter: ${payload.filterSummary} | Total: ${payload.candidates.length}`, 125))}) Tj`,
-      'ET',
-    ];
-
-    let y = 472;
-    for (let i = 0; i < pages[p].length; i += 1) {
-      const row = pages[p][i];
-      ops.push('BT');
-      ops.push('/F1 9 Tf');
-      ops.push('0.12 0.15 0.22 rg');
-      const line = `${p * rowsPerPage + i + 1}. ${row.displayName} (${row.domain}) — ${row.status.toUpperCase()} — ${row.meaning ?? row.languageOrigin}`;
-      ops.push(`46 ${y} Td (${sanitizePdfText(truncateText(line, 120))}) Tj`);
-      ops.push('ET');
-      y -= 17;
-    }
-
-    const stream = ops.join('\n');
-    const byteLen = encoder.encode(stream).length;
-    objects.push(
-      `${pageObjId} 0 obj\n<< /Type /Page /Parent 2 0 R ` +
-        `/MediaBox [0 0 842 595] ` +
-        `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> ` +
-        `/Contents ${contentObjId} 0 R >>\nendobj`,
-    );
-    objects.push(
-      `${contentObjId} 0 obj\n<< /Length ${byteLen} >>\nstream\n${stream}\nendstream\nendobj`,
-    );
-  }
-
-  const kids = pageIds.map((id) => `${id} 0 R`).join(' ');
-  objects[1] = `2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${pageIds.length} >>\nendobj`;
-
-  let pdfBody = '%PDF-1.4\n';
-  const offsets: number[] = [0];
-
-  for (const obj of objects) {
-    offsets.push(encoder.encode(pdfBody).length);
-    pdfBody += `${obj}\n`;
-  }
-
-  const xrefStart = encoder.encode(pdfBody).length;
-  pdfBody += `xref\n0 ${objects.length + 1}\n`;
-  pdfBody += '0000000000 65535 f \n';
-
-  for (let i = 1; i < offsets.length; i += 1) {
-    pdfBody += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
-  }
-
-  pdfBody +=
-    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n` +
-    `startxref\n${xrefStart}\n%%EOF\n`;
-
-  return new Blob([pdfBody], { type: 'application/pdf' });
+  const bytes = generateBrandReportPdf(payload);
+  return new Blob([bytes], { type: 'application/pdf' });
 }
