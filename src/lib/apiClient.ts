@@ -6,9 +6,34 @@ import type {
   ExportReportPayload,
   QuickCheckResponse,
 } from '../types/brand.ts';
+import {
+  buildStaticPdfReportBlob,
+  getStaticDictionaryStats,
+  inspectStaticBrandCandidate,
+  runStaticQuickDomainCheck,
+  streamStaticBrandDiscovery,
+} from './staticEngine.ts';
+
+// Remember when running on static hosting (no Node /api backend) so subsequent
+// calls go straight to the browser-native RDAP + Datamuse engine.
+let useStaticFallback = false;
+
+function isMissingBackendResponse(res: Response, expectedMime: string): boolean {
+  if (res.status === 404 || res.status === 405) return true;
+  const contentType = res.headers.get('content-type') ?? '';
+  return res.ok && !contentType.includes(expectedMime);
+}
 
 export async function fetchDictionaryStats(): Promise<DictionaryStatsResponse> {
+  if (useStaticFallback) {
+    return getStaticDictionaryStats();
+  }
+
   const res = await fetch('/api/stats');
+  if (isMissingBackendResponse(res, 'application/json')) {
+    useStaticFallback = true;
+    return getStaticDictionaryStats();
+  }
   if (!res.ok) {
     throw new Error('Failed to load dictionary statistics');
   }
@@ -20,6 +45,11 @@ export async function streamBrandDiscovery(
   signal: AbortSignal,
   onEvent: (event: DiscoveryStreamEvent) => void,
 ): Promise<void> {
+  if (useStaticFallback) {
+    await streamStaticBrandDiscovery(params, signal, onEvent);
+    return;
+  }
+
   const res = await fetch('/api/discover/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -27,12 +57,13 @@ export async function streamBrandDiscovery(
     signal,
   });
 
+  if (isMissingBackendResponse(res, 'x-ndjson')) {
+    useStaticFallback = true;
+    await streamStaticBrandDiscovery(params, signal, onEvent);
+    return;
+  }
+
   if (!res.ok || !res.body) {
-    if (res.status === 404) {
-      throw new Error(
-        'Discovery API not found (404). Run "npm start" and open http://127.0.0.1:3456.',
-      );
-    }
     throw new Error(`Discovery request failed with status ${res.status}`);
   }
 
@@ -65,11 +96,20 @@ export async function runQuickDomainCheck(
   words: string[],
   forceRefresh = false,
 ): Promise<QuickCheckResponse> {
+  if (useStaticFallback) {
+    return runStaticQuickDomainCheck(words, forceRefresh);
+  }
+
   const res = await fetch('/api/domain/check', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ words, forceRefresh }),
   });
+
+  if (isMissingBackendResponse(res, 'application/json')) {
+    useStaticFallback = true;
+    return runStaticQuickDomainCheck(words, forceRefresh);
+  }
 
   if (!res.ok) {
     throw new Error('Domain verification failed');
@@ -81,11 +121,20 @@ export async function runQuickDomainCheck(
 export async function inspectBrandCandidate(
   word: string,
 ): Promise<BrandInspectionResponse> {
+  if (useStaticFallback) {
+    return inspectStaticBrandCandidate(word);
+  }
+
   const res = await fetch('/api/domain/inspect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ word }),
   });
+
+  if (isMissingBackendResponse(res, 'application/json')) {
+    useStaticFallback = true;
+    return inspectStaticBrandCandidate(word);
+  }
 
   if (!res.ok) {
     throw new Error('Brand inspection request failed');
@@ -97,15 +146,24 @@ export async function inspectBrandCandidate(
 export async function requestPdfReportBlob(
   payload: ExportReportPayload,
 ): Promise<Blob> {
+  if (useStaticFallback) {
+    return buildStaticPdfReportBlob(payload);
+  }
+
   const res = await fetch('/api/export/pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
-  if (!res.ok) {
-    throw new Error('Failed to generate PDF report');
+  if (isMissingBackendResponse(res, 'application/pdf')) {
+    useStaticFallback = true;
+    return buildStaticPdfReportBlob(payload);
   }
 
-  return await res.blob();
+  if (!res.ok) {
+    throw new Error('PDF report export failed');
+  }
+
+  return res.blob();
 }
