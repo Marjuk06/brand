@@ -128,14 +128,50 @@ export function App() {
       setTakenCount(0);
       setScanError(null);
 
+      // Batch incoming stream events per animation frame to avoid re-rendering
+      // the full candidate table on every single domain result.
+      let pendingCandidates: BrandCandidate[] = [];
+      let pendingProgress: {
+        scannedCount: number;
+        availableCount: number;
+        takenCount: number;
+        currentWord: string;
+      } | null = null;
+      let rafId: number | null = null;
+
+      const flushBufferedEvents = (): void => {
+        rafId = null;
+        if (pendingCandidates.length > 0) {
+          const batch = pendingCandidates;
+          pendingCandidates = [];
+          setDiscoveredMap((prev) => {
+            const next = new Map(prev);
+            for (const candidate of batch) {
+              next.set(candidate.word, candidate);
+            }
+            return next;
+          });
+        }
+        if (pendingProgress) {
+          const prog = pendingProgress;
+          pendingProgress = null;
+          setScannedCount(prog.scannedCount);
+          setAvailableCount(prog.availableCount);
+          setTakenCount(prog.takenCount);
+          setCurrentWord(prog.currentWord);
+        }
+      };
+
+      const scheduleFlush = (): void => {
+        if (rafId === null) {
+          rafId = window.requestAnimationFrame(flushBufferedEvents);
+        }
+      };
+
       try {
         await streamBrandDiscovery(scanParams, controller.signal, (event) => {
           if (event.type === 'candidate') {
-            setDiscoveredMap((prev) => {
-              const next = new Map(prev);
-              next.set(event.candidate.word, event.candidate);
-              return next;
-            });
+            pendingCandidates.push(event.candidate);
             if (
               event.candidate.status === 'available' &&
               !celebratedAvailableRef.current
@@ -143,20 +179,36 @@ export function App() {
               celebratedAvailableRef.current = true;
               haptics.trigger('success');
             }
+            scheduleFlush();
           } else if (event.type === 'progress') {
-            setScannedCount(event.scannedCount);
-            setAvailableCount(event.availableCount);
-            setTakenCount(event.takenCount);
-            setCurrentWord(event.currentWord);
+            pendingProgress = {
+              scannedCount: event.scannedCount,
+              availableCount: event.availableCount,
+              takenCount: event.takenCount,
+              currentWord: event.currentWord,
+            };
+            scheduleFlush();
           } else if (event.type === 'done') {
+            if (rafId !== null) {
+              window.cancelAnimationFrame(rafId);
+            }
+            flushBufferedEvents();
             setTotalMatchingPool(event.totalMatchingPool);
             setNextOffset(event.nextOffset);
           } else if (event.type === 'error') {
+            if (rafId !== null) {
+              window.cancelAnimationFrame(rafId);
+            }
+            flushBufferedEvents();
             haptics.trigger('error');
             setScanError(event.message);
           }
         });
       } catch (err) {
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId);
+        }
+        flushBufferedEvents();
         if ((err as Error).name !== 'AbortError') {
           haptics.trigger('error');
           setScanError(

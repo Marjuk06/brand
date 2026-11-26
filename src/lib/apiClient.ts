@@ -28,6 +28,11 @@ export async function streamBrandDiscovery(
   });
 
   if (!res.ok || !res.body) {
+    if (res.status === 404) {
+      throw new Error(
+        'Discovery API not found (404). Run "npm start" and open http://127.0.0.1:3456.',
+      );
+    }
     throw new Error(`Discovery request failed with status ${res.status}`);
   }
 
