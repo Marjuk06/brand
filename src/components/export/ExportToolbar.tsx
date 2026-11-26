@@ -55,7 +55,7 @@ export function ExportToolbar({
         disabled={disabled}
         onClick={() => {
           haptics.trigger('select');
-          exportCandidatesAsCsv(candidates, filenamePrefix);
+          exportCandidatesAsCsv(candidates, filenamePrefix, filterSummary);
         }}
       >
         <DownloadIcon size={13} />

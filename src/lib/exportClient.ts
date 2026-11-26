@@ -20,9 +20,30 @@ function escapeCsvCell(value: string | number | undefined): string {
   return str;
 }
 
+function buildExportFilename(
+  prefix: string,
+  filterSummary: string,
+  count: number,
+  extension: 'csv' | 'json' | 'pdf',
+): string {
+  const slug = filterSummary
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10);
+  const timePart = now.toTimeString().slice(0, 8).replace(/:/g, '');
+  const parts = [prefix, slug, `${count}items`, `${datePart}-${timePart}`].filter(
+    Boolean,
+  );
+  return `${parts.join('-')}.${extension}`;
+}
+
 export function exportCandidatesAsCsv(
   candidates: BrandCandidate[],
   filenamePrefix = 'mother-brand-candidates',
+  filterSummary = '',
 ): void {
   const headers = [
     'Brand Name',
@@ -73,8 +94,10 @@ export function exportCandidatesAsCsv(
 
   const csvContent = `\uFEFF${lines.join('\r\n')}`;
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const stamp = new Date().toISOString().slice(0, 10);
-  triggerBlobDownload(blob, `${filenamePrefix}-${stamp}.csv`);
+  triggerBlobDownload(
+    blob,
+    buildExportFilename(filenamePrefix, filterSummary, candidates.length, 'csv'),
+  );
 }
 
 export function exportCandidatesAsJson(
@@ -111,8 +134,10 @@ export function exportCandidatesAsJson(
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: 'application/json;charset=utf-8;',
   });
-  const stamp = new Date().toISOString().slice(0, 10);
-  triggerBlobDownload(blob, `${filenamePrefix}-${stamp}.json`);
+  triggerBlobDownload(
+    blob,
+    buildExportFilename(filenamePrefix, filterSummary, candidates.length, 'json'),
+  );
 }
 
 export async function exportCandidatesAsPdf(
@@ -126,6 +151,8 @@ export async function exportCandidatesAsPdf(
     filterSummary,
     candidates,
   });
-  const stamp = new Date().toISOString().slice(0, 10);
-  triggerBlobDownload(blob, `${filenamePrefix}-${stamp}.pdf`);
+  triggerBlobDownload(
+    blob,
+    buildExportFilename(filenamePrefix, filterSummary, candidates.length, 'pdf'),
+  );
 }
