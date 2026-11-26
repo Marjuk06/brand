@@ -1,0 +1,117 @@
+:root {
+  --bg-canvas: #000000;
+  --bg-surface: rgb(12 12 12 / 0.72);
+  --bg-elevated: rgb(22 22 22 / 0.78);
+  --bg-hover: rgb(34 34 34 / 0.86);
+  --bg-muted: rgb(20 20 20 / 0.75);
+  --bg-glass-menu: rgb(14 14 14 / 0.9);
+  --bg-glass-dock: rgb(16 16 16 / 0.78);
+
+  --specular-top: inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --border-subtle: rgb(255 255 255 / 0.11);
+  --border-strong: rgb(255 255 255 / 0.24);
+
+  --text-primary: #ffffff;
+  --text-secondary: #c8c8c8;
+  --text-muted: #9a9a9a;
+
+  --target-size: 40px;
+
+  color-scheme: dark;
+  accent-color: #ffffff;
+  scrollbar-color: #3a3a3a #000000;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --target-size: 44px;
+  }
+}
+
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #3a3a3a;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+}
+
+@supports not (accent-color: auto) {
+  input[type='checkbox']:checked {
+    outline: 2px solid #ffffff;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  clip-path: inset(50%);
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.mono {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.22rem 0.58rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-available {
+  background-color: #ffffff;
+  color: #000000;
+  border: 1px solid #ffffff;
+}
+
+.badge-taken {
+  background-color: rgb(20 20 20 / 0.9);
+  color: #a3a3a3;
+  border: 1px solid rgb(255 255 255 / 0.14);
+}
+
+.badge-unknown {
+  background-color: rgb(26 26 26 / 0.9);
+  color: #b5b5b5;
+  border: 1px solid rgb(255 255 255 / 0.18);
+}
